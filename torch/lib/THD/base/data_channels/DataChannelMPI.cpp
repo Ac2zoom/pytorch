@@ -100,11 +100,20 @@ void DataChannelMPI::destroy() {}
 
 
 bool DataChannelMPI::init() {
+#ifdef OMPI_MAJOR_VERSION
+  // OMPI_* is specific to Openmpi implementation.
+  // Openmpi v1.10 segfaults in MPI_Bcast with CUDA buffer.
+  if (int(OMPI_MAJOR_VERSION) < 2) {
+      throw std::runtime_error("Please use Openmpi major version 2 and above for distributed.");
+  }
+#endif /* OMPI_MAJOR_VERSION */
+
   int provided;
   MPI_Init_thread(NULL, NULL, MPI_THREAD_MULTIPLE, &provided);
   if (provided != MPI_THREAD_MULTIPLE) {
     std::cerr << "WARNING: Used MPI implementation doesn't support multithreading, "
               << "so distributed functions might not work properly."
+              << "If you are using mpich, try setting environment MPICH_MAX_THREAD_SAFETY=multiple and rerun."
               << std::endl;
   }
 

@@ -2,17 +2,18 @@
 
 // ${generated_comment}
 
-#include "ATen/Allocator.h"
-#include "ATen/ArrayRef.h"
 #include "ATen/ATenGeneral.h"
+#include "ATen/Allocator.h"
+#include "ATen/Deprecated.h"
 #include "ATen/Generator.h"
-#include "ATen/Half.h"
+#include "ATen/Layout.h"
 #include "ATen/Scalar.h"
 #include "ATen/ScalarType.h"
 #include "ATen/SparseTensorRef.h"
 #include "ATen/Tensor.h"
-#include "ATen/Deprecated.h"
-#include "ATen/Layout.h"
+#include "ATen/core/ArrayRef.h"
+#include "ATen/core/Half.h"
+#include "THNN/Reduction.h"
 
 #include <array>
 #include <cstddef>
@@ -55,10 +56,10 @@ struct AT_API Type {
   bool is_variable() const noexcept { return is_variable_; }
   bool is_undefined() const noexcept { return is_undefined_; }
   static void registerCPU(Context * context);
-  virtual std::unique_ptr<Storage> storage() const = 0;
-  virtual std::unique_ptr<Storage> storage(size_t size) const = 0;
+  virtual std::unique_ptr<Storage> storage(bool resizable = false) const = 0;
+  virtual std::unique_ptr<Storage> storage(size_t size, bool resizable = false) const = 0;
   virtual std::unique_ptr<Storage> storageFromBlob(void * data, int64_t size, const std::function<void(void*)> & deleter=noop_deleter) const = 0;
-  virtual std::unique_ptr<Storage> storageWithAllocator(int64_t size, std::unique_ptr<Allocator> allocator) const = 0;
+  virtual std::unique_ptr<Storage> storageWithAllocator(int64_t size, Allocator* allocator) const = 0;
   virtual std::unique_ptr<Generator> generator() const = 0;
   virtual Tensor unsafeTensorFromTH(void * th_pointer, bool retain) const = 0;
   virtual std::unique_ptr<Storage> unsafeStorageFromTH(void * th_pointer, bool retain) const = 0;
@@ -85,8 +86,8 @@ struct AT_API Type {
 
   Tensor tensorFromBlob(void * data, IntList sizes, const std::function<void(void*)> & deleter=noop_deleter) const;
   Tensor tensorFromBlob(void * data, IntList sizes, IntList strides, const std::function<void(void*)> & deleter=noop_deleter) const;
-  Tensor tensorWithAllocator(IntList sizes, std::unique_ptr<Allocator> allocator) const;
-  Tensor tensorWithAllocator(IntList sizes, IntList strides, std::unique_ptr<Allocator> allocator) const;
+  Tensor tensorWithAllocator(IntList sizes, Allocator* allocator) const;
+  Tensor tensorWithAllocator(IntList sizes, IntList strides, Allocator* allocator) const;
   Tensor scalarTensor(Scalar s) const;
 
   bool operator==(const Type& other) const;

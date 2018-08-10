@@ -6,8 +6,8 @@ set TORCH_LIB_DIR=%cd:\=/%/torch/lib
 set INSTALL_DIR=%cd:\=/%/torch/lib/tmp_install
 set THIRD_PARTY_DIR=%cd:\=/%/third_party
 set PATH=%INSTALL_DIR%/bin;%PATH%
-set BASIC_C_FLAGS= /DTH_INDEX_BASE=0 /I%INSTALL_DIR%/include /I%INSTALL_DIR%/include/TH /I%INSTALL_DIR%/include/THC /I%INSTALL_DIR%/include/THS /I%INSTALLDIR%/include/THCS /I%INSTALLDIR%/include/THPP /I%INSTALLDIR%/include/THNN /I%INSTALLDIR%/include/THCUNN
-set BASIC_CUDA_FLAGS= -DTH_INDEX_BASE=0 -I%INSTALL_DIR%/include -I%INSTALL_DIR%/include/TH -I%INSTALL_DIR%/include/THC -I%INSTALL_DIR%/include/THS -I%INSTALLDIR%/include/THCS -I%INSTALLDIR%/include/THPP -I%INSTALLDIR%/include/THNN -I%INSTALLDIR%/include/THCUNN
+set BASIC_C_FLAGS= /I%INSTALL_DIR%/include /I%INSTALL_DIR%/include/TH /I%INSTALL_DIR%/include/THC /I%INSTALL_DIR%/include/THS /I%INSTALLDIR%/include/THCS /I%INSTALLDIR%/include/THPP /I%INSTALLDIR%/include/THNN /I%INSTALLDIR%/include/THCUNN
+set BASIC_CUDA_FLAGS= -I%INSTALL_DIR%/include -I%INSTALL_DIR%/include/TH -I%INSTALL_DIR%/include/THC -I%INSTALL_DIR%/include/THS -I%INSTALLDIR%/include/THCS -I%INSTALLDIR%/include/THPP -I%INSTALLDIR%/include/THNN -I%INSTALLDIR%/include/THCUNN
 set LDFLAGS=/LIBPATH:%INSTALL_DIR%/lib
 :: set TORCH_CUDA_ARCH_LIST=6.1
 
@@ -73,6 +73,10 @@ IF "%REL_WITH_DEB_INFO%"=="1" (
 
 IF NOT DEFINED MAX_JOBS (
   set MAX_JOBS=%NUMBER_OF_PROCESSORS%
+)
+
+IF NOT DEFINED BUILD_SHARED_LIBS (
+  set BUILD_SHARED_LIBS=ON
 )
 
 IF "%CMAKE_GENERATOR%"=="" (
@@ -175,6 +179,10 @@ goto:eof
   cmake .. %CMAKE_GENERATOR_COMMAND% ^
                   -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
                   -DBUILD_CAFFE2=OFF ^
+                  -DBUILD_TORCH="%BUILD_TORCH%" ^
+                  -DNVTOOLEXT_HOME="%NVTOOLEXT_HOME%" ^
+                  -DNO_API=ON ^
+                  -DBUILD_SHARED_LIBS="%BUILD_SHARED_LIBS%" ^
                   -DBUILD_ATEN=ON ^
                   -DBUILD_PYTHON=OFF ^
                   -DBUILD_BINARY=OFF ^

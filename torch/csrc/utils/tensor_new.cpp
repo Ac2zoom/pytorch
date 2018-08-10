@@ -17,8 +17,8 @@
 #include "torch/csrc/autograd/generated/variable_factories.h"
 
 #include <ATen/ATen.h>
-#include <ATen/Error.h>
-#include <ATen/optional.h>
+#include <ATen/core/Error.h>
+#include <ATen/core/optional.h>
 
 #include <stdexcept>
 #include <vector>
@@ -124,7 +124,7 @@ ScalarType infer_scalar_type(PyObject *obj) {
   if (PyFloat_Check(obj)) {
     // this is always guaranteed to be a floating-point type, and makes it more
     // convenient to write e.g. torch.tensor(0.) than torch.tensor(0., dtype=torch.Tensor.dtype).
-    return torch::tensor::get_default_tensor_type().scalarType();
+    return torch::tensors::get_default_tensor_type().scalarType();
   }
   if (THPUtils_checkLong(obj)) {
     return ScalarType::Long;
@@ -139,8 +139,10 @@ ScalarType infer_scalar_type(PyObject *obj) {
   }
 #ifdef USE_NUMPY
   if (PyArray_Check(obj)) {
-    auto array = (PyArrayObject*)obj;
-    return numpy_dtype_to_aten(PyArray_TYPE(array));
+    return numpy_dtype_to_aten(PyArray_TYPE((PyArrayObject*)obj));
+  }
+  if (PyArray_CheckScalar(obj)) {
+    return numpy_dtype_to_aten(PyArray_TYPE((PyArrayObject*)(PyArray_FromScalar(obj, NULL))));
   }
 #endif
   if (PySequence_Check(obj)) {
@@ -148,7 +150,7 @@ ScalarType infer_scalar_type(PyObject *obj) {
     auto length = PySequence_Length(obj);
     if (length < 0) throw python_error();
     // match NumPy semantics, except use default tensor type instead of double.
-    if (length == 0) return torch::tensor::get_default_tensor_type().scalarType();
+    if (length == 0) return torch::tensors::get_default_tensor_type().scalarType();
     for (int i = 0; i < length; ++i) {
       THPObjectPtr handle(PySequence_GetItem(obj, i));
       if (!handle) throw python_error();

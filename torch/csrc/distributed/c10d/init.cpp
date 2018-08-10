@@ -13,9 +13,10 @@
 #include <gloo/transport/tcp/device.h>
 #include <pybind11/chrono.h>
 
-#include "torch/csrc/Exceptions.h"
-#include "torch/csrc/utils/object_ptr.h"
-#include "torch/csrc/utils/pybind.h"
+#include <torch/csrc/Exceptions.h>
+#include <torch/csrc/distributed/c10d/ddp.h>
+#include <torch/csrc/utils/object_ptr.h>
+#include <torch/csrc/utils/pybind.h>
 
 namespace torch {
 namespace distributed {
@@ -36,19 +37,19 @@ PyObject* c10d_init(PyObject* _unused) {
   auto module = py::handle(c10d_module).cast<py::module>();
 
   py::class_<::c10d::BroadcastOptions>(module, "BroadcastOptions")
-    .def(py::init<>())
-    .def_readwrite("rootRank", &::c10d::BroadcastOptions::rootRank)
-    .def_readwrite("rootTensor", &::c10d::BroadcastOptions::rootTensor);
+      .def(py::init<>())
+      .def_readwrite("rootRank", &::c10d::BroadcastOptions::rootRank)
+      .def_readwrite("rootTensor", &::c10d::BroadcastOptions::rootTensor);
 
   py::class_<::c10d::AllreduceOptions>(module, "AllreduceOptions")
-    .def(py::init<>())
-    .def_readwrite("reduceOp", &::c10d::AllreduceOptions::reduceOp);
+      .def(py::init<>())
+      .def_readwrite("reduceOp", &::c10d::AllreduceOptions::reduceOp);
 
   py::enum_<::c10d::ReduceOp>(module, "ReduceOp")
-    .value("SUM", ::c10d::ReduceOp::SUM)
-    .value("PRODUCT", ::c10d::ReduceOp::PRODUCT)
-    .value("MIN", ::c10d::ReduceOp::MIN)
-    .value("MAX", ::c10d::ReduceOp::MAX);
+      .value("SUM", ::c10d::ReduceOp::SUM)
+      .value("PRODUCT", ::c10d::ReduceOp::PRODUCT)
+      .value("MIN", ::c10d::ReduceOp::MIN)
+      .value("MAX", ::c10d::ReduceOp::MAX);
 
   auto store =
       shared_ptr_class_<::c10d::Store>(module, "Store")
@@ -131,9 +132,12 @@ PyObject* c10d_init(PyObject* _unused) {
   shared_ptr_class_<::c10d::ProcessGroupGloo::Options>(
       processGroupGloo, "Options")
       .def(py::init<>())
+      .def_readwrite("devices", &::c10d::ProcessGroupGloo::Options::devices)
       .def_readwrite("timeout", &::c10d::ProcessGroupGloo::Options::timeout)
       .def_readwrite("threads", &::c10d::ProcessGroupGloo::Options::threads)
-      .def_readwrite("devices", &::c10d::ProcessGroupGloo::Options::devices);
+      .def_readwrite(
+          "cacheNumAlgorithmEntries",
+          &::c10d::ProcessGroupGloo::Options::cacheNumAlgorithmEntries);
 
   processGroupGloo.def_static(
       "create_tcp_device",
@@ -195,6 +199,8 @@ PyObject* c10d_init(PyObject* _unused) {
           "wait",
           &::c10d::ProcessGroup::Work::wait,
           py::call_guard<py::gil_scoped_release>());
+
+  module.def("_dist_broadcast_coalesced", &::c10d::distBroadcastCoalesced);
 
   Py_RETURN_TRUE;
 }

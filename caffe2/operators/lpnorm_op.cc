@@ -1,5 +1,9 @@
 #include "caffe2/operators/lpnorm_op.h"
 
+#include "caffe2/core/operator.h"
+#include "caffe2/core/types.h"
+#include "caffe2/utils/eigen_utils.h"
+
 namespace caffe2 {
 
 template <>
@@ -11,12 +15,12 @@ bool LpNormOp<float, CPUContext>::RunOnDevice() {
   const float size = average_ ? (float)X.size() : 1.0f;
   CAFFE_ENFORCE_GT(size, 0);
   if (p_ == 1) {
-    *(norm->mutable_data<float>()) =
+    *(norm->template mutable_data<float>()) =
         (ConstEigenVectorMap<float>(X_data, X.size()).array()).abs().sum() /
         size;
     // L1(x) = sum(|x|), L1_average(x) = sum(\x\) / x.size()
   } else if (p_ == 2) {
-    *(norm->mutable_data<float>()) =
+    *(norm->template mutable_data<float>()) =
         (ConstEigenVectorMap<float>(X_data, X.size()).array()).square().sum() /
         size;
     // L2(x) = (sum(|x|^2)), L2_average(x) = sum(|x|^2) / x.size()
@@ -39,15 +43,17 @@ bool LpNormGradientOp<float, CPUContext>::RunOnDevice() {
     for (int i = 0; i < X.size(); ++i) {
       float temp = (X.data<float>())[i];
       if (temp < -kEps) {
-        dX->mutable_data<float>()[i] = -(dnorm.data<float>())[0] / size;
+        dX->template mutable_data<float>()[i] =
+            -(dnorm.data<float>())[0] / size;
       } else if (temp > kEps) {
-        dX->mutable_data<float>()[i] = (dnorm.data<float>())[0] / size;
+        dX->template mutable_data<float>()[i] = (dnorm.data<float>())[0] / size;
       } else {
-        dX->mutable_data<float>()[i] = 0;
+        dX->template mutable_data<float>()[i] = 0;
       }
     }
   } else if (p_ == 2) {
-    EigenVectorMap<float>(dX->mutable_data<float>(), X.size()).array() =
+    EigenVectorMap<float>(dX->template mutable_data<float>(), X.size())
+        .array() =
         ConstEigenVectorMap<float>(X.data<float>(), X.size()).array() * 2.0f *
         ((dnorm.data<float>())[0] / size);
   }
@@ -118,8 +124,19 @@ Y:
 )DOC")
     .Input(0, "X", "1D Input tensor of data to be operated on.")
     .Output(0, "Z", "1D output tensor")
-    .Arg("p", "*(type: int; default: 2, possible values: {1,2})* Order of the norm in p-norm.")
-    .Arg("average", "*(type: bool; default: False)* Whether we calculate norm or averaged_norm.The Lp_averaged_norm(x) is defined as Lp_averaged_norm(x) = LpNorm(x) / size(x)");
+    .Arg(
+        "p",
+        "*(type: int; default: 2, possible values: {1,2})* Order of the norm in p-norm.")
+    .Arg(
+        "average",
+        "*(type: bool; default: False)* Whether we calculate norm or averaged_norm.The Lp_averaged_norm(x) is defined as Lp_averaged_norm(x) = LpNorm(x) / size(x)")
+    .TensorInferenceFunction([](const OperatorDef& /* unused */,
+                                const vector<TensorShape>& in) {
+      std::vector<TIndex> output_dims(1);
+      output_dims[0] = 1; // 1
+      return vector<TensorShape>{
+          CreateTensorShape(vector<TIndex>{output_dims}, in[0].data_type())};
+    });
 
 OPERATOR_SCHEMA(LpNormGradient)
     .NumInputs(2)

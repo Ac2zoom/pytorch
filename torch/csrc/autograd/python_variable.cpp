@@ -16,7 +16,6 @@
 #include "torch/csrc/autograd/generated/VariableType.h"
 #include "torch/csrc/autograd/utils/python_error_messages.h"
 #include "torch/csrc/autograd/utils/wrap_outputs.h"
-#include "torch/csrc/jit/tracer_state.h"
 #include "torch/csrc/tensor/python_tensor.h"
 #include "torch/csrc/utils/auto_gil.h"
 #include "torch/csrc/utils/cuda_lazy_init.h"
@@ -126,7 +125,7 @@ static void THPVariable_dealloc(THPVariable* self)
 static PyObject *THPVariable_pynew(PyTypeObject *type, PyObject *args, PyObject *kwargs)
 {
   HANDLE_TH_ERRORS
-  auto& default_type = torch::tensor::get_default_tensor_type();
+  auto& default_type = torch::tensors::get_default_tensor_type();
   auto tensor = torch::utils::legacy_tensor_ctor(default_type, args, kwargs);
   return THPVariable_NewWithVar(type, std::move(tensor));
   END_HANDLE_TH_ERRORS
@@ -383,7 +382,7 @@ static PyObject * THPVariable_layout(THPVariable* self) {
 
 static PyObject * THPVariable_device(THPVariable* self) {
   HANDLE_TH_ERRORS
-  return THPDevice_New(torch::tensor::getDevice(self->cdata));
+  return THPDevice_New(torch::tensors::getDevice(self->cdata));
   END_HANDLE_TH_ERRORS
 }
 

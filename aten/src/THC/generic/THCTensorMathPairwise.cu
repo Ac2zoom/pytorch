@@ -191,13 +191,13 @@ THCTensor_(remainder)(THCState *state, THCTensor *self_, THCTensor *src_, real v
 void THCTensor_(tril)(THCState *state, THCTensor *self_, THCTensor *src_, int64_t k)
 {
   THCAssertSameGPU(THCTensor_(checkGPU)(state, 2, self_, src_));
-  THArgCheck(src_->_dim() == 2, 1, "expected a matrix");
+  THArgCheck(!src_->is_empty() && src_->dim() == 2, 1, "expected a matrix");
 
   if (self_ != src_)
     THCTensor_(resizeAs)(state, self_, src_);
 
-  int64_t stride0 = self_->stride[0];
-  int64_t stride1 = self_->stride[1];
+  int64_t stride0 = self_->stride(0);
+  int64_t stride1 = self_->stride(1);
   real *start = THCTensor_(data)(state, self_);
 
   TensorTriOp<real, 0> op(start, stride0, stride1, k);
@@ -220,13 +220,13 @@ void THCTensor_(tril)(THCState *state, THCTensor *self_, THCTensor *src_, int64_
 void THCTensor_(triu)(THCState *state, THCTensor *self_, THCTensor *src_, int64_t k)
 {
   THCAssertSameGPU(THCTensor_(checkGPU)(state, 2, self_, src_));
-  THArgCheck(src_->_dim() == 2, 1, "expected a matrix");
+  THArgCheck(!src_->is_empty() && src_->dim() == 2, 1, "expected a matrix");
 
   if (self_ != src_)
     THCTensor_(resizeAs)(state, self_, src_);
 
-  int64_t stride0 = self_->stride[0];
-  int64_t stride1 = self_->stride[1];
+  int64_t stride0 = self_->stride(0);
+  int64_t stride1 = self_->stride(1);
   real *start = THCTensor_(data)(state, self_);
 
   TensorTriOp<real, 1> op(start, stride0, stride1, k);
@@ -256,8 +256,7 @@ THC_API int THCTensor_(equal)(THCState *state, THCTensor *self_, THCTensor *src_
   // 1 if the two tensors are equal at a position, otherwise 0. If the minimum value
   // in this buffer is 1, the two tensors are equal, otherwise they are not
 
-  THLongStorage *size = THCTensor_(newSizeOf)(state, self_);
-  THCudaByteTensor *buf = THCudaByteTensor_newWithSize(state, size, NULL);
+  THCudaByteTensor *buf = THCudaByteTensor_newWithSize(state, self_->sizes(), {});
 
   if (!THC_pointwiseApply3<uint8_t, real, real>(state, buf, self_, src_, TensorEQOp<real, unsigned char>())) {
     THArgCheck(false, 2, CUTORCH_DIM_WARNING);
@@ -265,7 +264,6 @@ THC_API int THCTensor_(equal)(THCState *state, THCTensor *self_, THCTensor *src_
 
   unsigned char min = THCudaByteTensor_minall(state, buf);
 
-  THLongStorage_free(size);
   THCudaByteTensor_free(state, buf);
 
   return min != 0;

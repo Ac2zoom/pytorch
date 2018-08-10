@@ -1,31 +1,22 @@
 #pragma once
 
-#include "ATen/ATenGeneral.h"
 #include <ATen/CPUGeneral.h>
+#include "ATen/ATenGeneral.h"
+#include "ATen/CUDAStream.h"
 #include "ATen/Generator.h"
 #include "ATen/Type.h"
 #include "ATen/Utils.h"
-#include "ATen/Error.h"
+#include "ATen/core/Error.h"
 #include "ATen/detail/CUDAHooksInterface.h"
+
+// This is temporary
+#include "ATen/core/ATenCoreTest.h"
 
 #include <memory>
 #include <mutex>
 #include <cstdint>
 
-// Forwarde declare these CUDA types here to avoid including CUDA headers in
-// ATen headers, which would make ATen always require CUDA to build.
-struct THCState;
-struct CUstream_st;
-typedef struct CUstream_st *cudaStream_t;
-struct cudaDeviceProp;
-
 namespace at {
-
-enum class IsVariable {
-  NotVariable,
-  Variable,
-  NumOptions
-};
 
 class AT_API Context {
 public:
@@ -85,18 +76,6 @@ public:
     return thc_state.get();
   }
 
-  cudaStream_t getCurrentCUDAStream() const {
-    return detail::getCUDAHooks().getCurrentCUDAStream(thc_state.get());
-  }
-  cudaStream_t getCurrentCUDAStreamOnDevice(int64_t device) const {
-    return detail::getCUDAHooks().getCurrentCUDAStreamOnDevice(thc_state.get(), device);
-  }
-  cudaDeviceProp* getCurrentDeviceProperties() const {
-    return detail::getCUDAHooks().getCurrentDeviceProperties(thc_state.get());
-  }
-  cudaDeviceProp* getDeviceProperties(int device) const {
-    return detail::getCUDAHooks().getDeviceProperties(thc_state.get(), device);
-  }
   int getNumGPUs() const {
     return detail::getCUDAHooks().getNumGPUs();
   }

@@ -58,16 +58,7 @@ class NetBase : public Observable<NetBase> {
       return false;
     }
     Wait();
-    handleRunError();
-    return true;
-  }
-
-  virtual void handleRunError() {
-    for (const Event* event : events_) {
-      if (event->Query() != EventStatus::EVENT_SUCCESS) {
-        CAFFE_THROW(event->ErrorMessage());
-      }
-    }
+    return handleRunError();
   }
 
   virtual bool RunAsync();
@@ -119,12 +110,21 @@ class NetBase : public Observable<NetBase> {
     CAFFE_THROW("Not implemented");
   };
 
+  virtual bool handleRunError() {
+    for (const Event* event : events_) {
+      if (event->Query() != EventStatus::EVENT_SUCCESS) {
+        CAFFE_THROW(event->ErrorMessage());
+      }
+    }
+    return true;
+  }
+
   vector<string> external_input_;
   vector<string> external_output_;
   string name_;
   vector<const Event*> events_;
   std::shared_ptr<const NetDef> net_def_;
-  DISABLE_COPY_AND_ASSIGN(NetBase);
+  AT_DISABLE_COPY_AND_ASSIGN(NetBase);
 };
 
 class ExecutorHelper {

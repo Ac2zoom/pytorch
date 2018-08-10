@@ -26,12 +26,11 @@ class AsyncSchedulingNet : public AsyncNetBase {
   std::mutex running_mutex_;
   std::condition_variable running_cv_;
   std::atomic<bool> running_;
-  std::atomic<bool> success_;
   bool use_dfs_scheduling_;
 
   std::atomic<int> processed_tasks_num_;
 
-  DISABLE_COPY_AND_ASSIGN(AsyncSchedulingNet);
+  AT_DISABLE_COPY_AND_ASSIGN(AsyncSchedulingNet);
 };
 
 } // namespace caffe2

@@ -18,15 +18,15 @@ struct EmbeddingOptions {
 
 class EmbeddingImpl : public torch::nn::Cloneable<EmbeddingImpl> {
  public:
+  EmbeddingImpl(int64_t count, int64_t dimension)
+      : EmbeddingImpl(EmbeddingOptions(count, dimension)) {}
   explicit EmbeddingImpl(EmbeddingOptions options);
 
   void reset() override;
-  std::vector<Variable> forward(std::vector<Variable>);
-  const EmbeddingOptions& options() const noexcept;
+  Tensor forward(Tensor);
 
- private:
-  EmbeddingOptions options_;
-  Variable table_;
+  EmbeddingOptions options;
+  Tensor weight;
 };
 
 TORCH_MODULE(Embedding);

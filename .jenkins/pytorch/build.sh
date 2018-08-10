@@ -5,7 +5,7 @@ if [[ "$BUILD_ENVIRONMENT" == "pytorch-linux-xenial-py3-clang5-asan" ]]; then
 fi
 
 # TODO: move this to Docker
-# TODO: add both NCCL and MPI in CI test by fixing these test first 
+# TODO: add both NCCL and MPI in CI test by fixing these test first
 # sudo apt-get update
 # sudo apt-get install libnccl-dev libnccl2
 # sudo apt-get install openmpi-bin libopenmpi-dev
@@ -23,24 +23,34 @@ python --version
 echo "GCC version:"
 gcc --version
 
+echo "CMake version:"
+cmake --version
+
 # TODO: Don't run this...
 pip install -r requirements.txt || true
 
 if [[ "$BUILD_ENVIRONMENT" == *rocm* ]]; then
+  # This is necessary in order to cross compile (or else we'll have missing GPU device).
+  export MAX_JOBS=4
+  # This is necessary in order to cross compile (or else we'll have missing GPU device).
   export HCC_AMDGPU_TARGET=gfx900
+
+  # These environment variables are not set on CI when we were running as the Jenkins user.
+  # The HIP Utility scripts require these environment variables to be set in order to run without error.
   export LANG=C.UTF-8
   export LC_ALL=C.UTF-8
 
-  # TODO: Install pyHIPIFY in the docker image
-  rm -rf pyHIPIFY || true
-  git clone https://github.com/ROCm-Developer-Tools/pyHIPIFY.git
-  chmod a+x pyHIPIFY/*.py
-  sudo cp -p pyHIPIFY/*.py /opt/rocm/bin
-  sudo chown -R jenkins:jenkins /usr/local
-  rm -rf "$(dirname "${BASH_SOURCE[0]}")/../../../pytorch_amd/" || true
-  python "$(dirname "${BASH_SOURCE[0]}")/../../tools/amd_build/build_pytorch_amd.py"
-  USE_ROCM=1 python setup.py install
-  exit
+  # This environment variable enabled HCC Optimizations that speed up the linking stage.
+  # https://github.com/RadeonOpenCompute/hcc#hcc-with-thinlto-linking
+  export KMTHINLTO=1
+
+  # Need the libc++1 and libc++abi1 libraries to allow torch._C to load at runtime
+  sudo apt-get install libc++1
+  sudo apt-get install libc++abi1
+
+  python tools/amd_build/build_pytorch_amd.py
+  USE_ROCM=1 python setup.py install --user
+  exit 0
 fi
 
 # TODO: Don't install this here
@@ -49,13 +59,17 @@ if ! which conda; then
 fi
 
 # sccache will fail for CUDA builds if all cores are used for compiling
-# gcc 7.2 with sccache seems to have intermittent OOM issue if all cores are used
-if ([[ "$BUILD_ENVIRONMENT" == *cuda* ]] || [[ "$BUILD_ENVIRONMENT" == *gcc7.2* ]]) && which sccache > /dev/null; then
+# gcc 7 with sccache seems to have intermittent OOM issue if all cores are used
+if ([[ "$BUILD_ENVIRONMENT" == *cuda* ]] || [[ "$BUILD_ENVIRONMENT" == *gcc7* ]]) && which sccache > /dev/null; then
   export MAX_JOBS=`expr $(nproc) - 1`
 fi
 
 # Target only our CI GPU machine's CUDA arch to speed up the build
 export TORCH_CUDA_ARCH_LIST=5.2
+
+if [[ "$BUILD_ENVIRONMENT" == *trusty-py3.6-gcc5.4* ]]; then
+  export DEBUG=1
+fi
 
 WERROR=1 python setup.py install
 
@@ -93,5 +107,5 @@ if [[ "$BUILD_TEST_LIBTORCH" == "1" ]]; then
   echo "Building libtorch"
   # NB: Install outside of source directory (at the same level as the root
   # pytorch folder) so that it doesn't get cleaned away prior to docker push.
-  WERROR=1 VERBOSE=1 tools/cpp_build/build_all.sh "$PWD/../cpp-build"
+  WERROR=1 VERBOSE=1 tools/cpp_build/build_caffe2.sh "$PWD/../cpp-build"
 fi

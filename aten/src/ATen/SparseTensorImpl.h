@@ -2,32 +2,53 @@
 
 #include "ATen/Tensor.h"
 #include "ATen/TensorImpl.h"
-#include "ATen/Error.h"
+#include "ATen/core/Error.h"
 
 namespace at {
-struct SparseTensorImpl : public TensorImpl {
-  // Stored in COO format, indices + values
+struct AT_API SparseTensorImpl : public TensorImpl {
+  // Stored in COO format, indices + values.
 
+  // Ideal INVARIANTS:
+  // _sparseDims: range [0, len(shape)]; _sparseDims + _denseDims = len(shape)
+  // _denseDims : range [0, len(shape)]; _sparseDims + _denseDims = len(shape)
+  // _indices.shape: dimensionality: 2,  shape: (_sparseDims, nnz)
+  // _values.shape:  dimensionality: 1 + _denseDims.  shape: (nnz, shape[_sparseDims:])
+
+  // Actual INVARIANT differences:
+  // 1) _sparseDims: range [1, len(shape)] (i.e. we don't allow 0 sparse dimensions)
+  // 2) when nnz = 0, there is strange behavior because we lack 0-dimensional sparse tensors.  Namely:
+  //    dimensionality == 0, _sparseDims == 0, _denseDims == 0, _indices.shape == {0}, _values.shape == {0}
+  // 3) For both _indices.shape and _values.shape, the nnz dimension may be larger than nnz
+  // 4) For _values.shape, the non-nnz dimensions may be smaller than the corresponding dimension size, e.g.
+  //    a shape (2,3) sparse tensor with _sparseDims == 1, may have _values.shape: (nnz, <=2, <=3).
+
+
+  // The true size of the sparse tensor (e.g., if you called to_dense()
+  // on it).  When THTensor merges into TensorImpl, this field
+  // should move to the parent class.
   std::vector<int64_t> size_;
-  // INVARIANT: indices_.size(1) >= nnz_ && values_.size(0) >= nnz_
+
+  // The number of non-zero elements.
   int64_t nnz_ = 0;
+
   int64_t sparseDims_ = 0; // number of sparse dimensions
   int64_t denseDims_ = 0; // number of dense dimensions
 
-  // 2-D tensor of nDim x nnz of indices. May have nnz dim bigger than nnz
-  // as buffer, so we keep track of both
   Tensor indices_; // always a LongTensor
   Tensor values_;
 
   // A sparse tensor is 'coalesced' if every index occurs at most once in
-  // the indices tensor, and the indices are in sorted order.
+  // the indices tensor, and the indices are in sorted order.  (This means
+  // that it is very easy to convert a coalesced tensor to CSR format: you
+  // need only compute CSR format indices.)
+  //
   // Most math operations can only be performed on coalesced sparse tensors,
   // because many algorithms proceed by merging two sorted lists (of indices).
   bool coalesced_ = false;
 
 public:
   // Public for now...
-  explicit SparseTensorImpl(Type * type);
+  explicit SparseTensorImpl(at::Backend, at::ScalarType);
 
   int64_t nnz() const { return nnz_; }
   int64_t sparseDims() const { return sparseDims_; }
@@ -36,11 +57,10 @@ public:
   Tensor indices() const { return indices_; }
   Tensor values() const { return values_; }
 
-  const char * toString() const override;
   IntList sizes() const override;
   IntList strides() const override;
   int64_t dim() const override;
-  Scalar localScalar() override;
+  TensorImpl* maybe_zero_dim(bool condition_when_zero_dim) override;
   void * unsafeGetTH(bool retain) override;
   std::unique_ptr<Storage> storage() override;
 
@@ -55,7 +75,7 @@ public:
     if (size.size() == 0) {
       size_ = {0};
     } else {
-      size_ = size;
+      size_ = size.vec();
     }
     sparseDims_ = sparseDims;
     denseDims_ = denseDims;

@@ -7,9 +7,6 @@ list(APPEND CMAKE_MODULE_PATH
   ${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/Modules
   ${CMAKE_CURRENT_SOURCE_DIR}/../../../cmake/Modules_CUDA_fix)
 
-# Polyfill for upstream FindCUDA
-include(CMakeInitializeConfigs)
-
 # Relies on CMAKE_INSTALL_PREFIX to be set to ../tmp_install.
 # It then finds $PREFIX/share/cmake/ATen/ATenConfig.cmake,
 # which defines ATEN_INCLUDE_DIR and ATEN_LIBRARIES.
@@ -80,8 +77,8 @@ set(C10D_SRCS
 
 set(C10D_LIBS
   caffe2_gpu
-  ${Gloo_NATIVE_LIBRARY}
   ${Gloo_LIBRARY}
+  ${Gloo_NATIVE_LIBRARY}
   )
 
 if(DISTRIBUTED_NCCL_FOUND)
@@ -109,8 +106,11 @@ target_compile_options(c10d PUBLIC
 # c10d links to Caffe2/ATen, but the targets don't add TH/THC to the include path
 target_include_directories(c10d PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_install/include/TH)
 target_include_directories(c10d PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../tmp_install/include/THC)
+# For <c10d/...>
+target_include_directories(c10d PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/..)
 # For torch/csrc/utils/hash.h and torch/csrc/utils/functional.h
 target_include_directories(c10d PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/../../..)
+# For <gloo/...>
 target_include_directories(c10d PUBLIC ${GLOO_INCLUDE_DIR})
 
 copy_header(CUDAUtils.hpp)

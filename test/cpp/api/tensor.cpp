@@ -1,10 +1,12 @@
 #include <catch.hpp>
 
-#include <torch/functions.h>
+#include <torch/tensor.h>
 
 #include <ATen/ATen.h>
 
 #include <cmath>
+#include <cstddef>
+#include <vector>
 
 template <typename T>
 bool exactly_equal(at::Tensor left, T right) {
@@ -129,6 +131,24 @@ TEST_CASE("Tensor/ContainsCorrectValuesForManyValues") {
   REQUIRE(almost_equal(tensor[2], 3.125));
 }
 
+TEST_CASE("Tensor/ContainsCorrectValuesForManyValuesVariable") {
+  auto tensor = torch::tensor({1, 2, 3});
+  REQUIRE(tensor.is_variable());
+  REQUIRE(tensor.numel() == 3);
+  REQUIRE(tensor.dtype() == at::kInt);
+  REQUIRE(exactly_equal(tensor[0], 1));
+  REQUIRE(exactly_equal(tensor[1], 2));
+  REQUIRE(exactly_equal(tensor[2], 3));
+
+  tensor = torch::tensor({1.5, 2.25, 3.125});
+  REQUIRE(tensor.is_variable());
+  REQUIRE(tensor.numel() == 3);
+  REQUIRE(tensor.dtype() == at::kDouble);
+  REQUIRE(almost_equal(tensor[0], 1.5));
+  REQUIRE(almost_equal(tensor[1], 2.25));
+  REQUIRE(almost_equal(tensor[2], 3.125));
+}
+
 TEST_CASE("Tensor/ContainsCorrectValuesWhenConstructedFromVector") {
   std::vector<int> v = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
   auto tensor = at::tensor(v);
@@ -160,4 +180,15 @@ TEST_CASE("Tensor/UsesOptionsThatAreSupplied") {
   REQUIRE(exactly_equal(tensor[0], 1));
   REQUIRE(exactly_equal(tensor[1], 2));
   REQUIRE(exactly_equal(tensor[2], 3));
+}
+
+TEST_CASE("FromBlob") {
+  std::vector<int32_t> v = {1, 2, 3};
+  auto tensor = torch::from_blob(
+      reinterpret_cast<void*>(v.data()), v.size(), torch::kInt32);
+  REQUIRE(tensor.is_variable());
+  REQUIRE(tensor.numel() == 3);
+  REQUIRE(tensor[0].toCInt() == 1);
+  REQUIRE(tensor[1].toCInt() == 2);
+  REQUIRE(tensor[2].toCInt() == 3);
 }

@@ -2,6 +2,7 @@
 #include "catch.hpp"
 
 #include "ATen/ATen.h"
+#include "THNN/Reduction.h"
 
 // for TH compat test only...
 struct THFloatTensor;
@@ -225,7 +226,7 @@ static void test(Type & type) {
   }
   SECTION("indexing by Scalar") {
     Tensor tensor = arange(0, 10, kInt);
-    Tensor one = ones({1}, kInt);
+    Tensor one = ones({}, kInt);
     for (int64_t i = 0; i < tensor.numel(); ++i) {
       REQUIRE(tensor[i].equal(one * i));
     }
@@ -266,8 +267,12 @@ static void test(Type & type) {
   SECTION("dispatch") {
     Tensor tensor = randn({20, 20});
     Tensor other = randn({20, 20});
-    auto result = tensor.m(relu).m(mse_loss, other, true, true);
+    auto result = tensor.m(relu).m(mse_loss, other, Reduction::ElementwiseMean);
     REQUIRE(result.allclose(mse_loss(relu(tensor), other)));
+  }
+  SECTION("core") {
+    int i = CoreTest();
+    REQUIRE(i + 1 == CoreTest());
   }
 }
 

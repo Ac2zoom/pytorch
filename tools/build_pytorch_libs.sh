@@ -41,6 +41,9 @@ while [[ $# -gt 0 ]]; do
       --full-caffe2)
           FULL_CAFFE2=1
           ;;
+      --cuda-static-link)
+          CAFFE2_STATIC_LINK_CUDA=1
+          ;;
       *)
           break
           ;;
@@ -49,6 +52,8 @@ while [[ $# -gt 0 ]]; do
 done
 
 CMAKE_INSTALL=${CMAKE_INSTALL-make install}
+
+BUILD_SHARED_LIBS=${BUILD_SHARED_LIBS-ON}
 
 # Save user specified env vars, we will manually propagate them
 # to cmake.  We copy distutils semantics, referring to
@@ -68,6 +73,13 @@ if [[ -n "$CPPFLAGS" ]]; then
   USER_LDFLAGS="$USER_LDFLAGS $CPPFLAGS"
 fi
 
+# Use ccache if available (this path is where Homebrew installs ccache symlinks)
+if [ "$(uname)" == 'Darwin' ]; then
+  if [ -d '/usr/local/opt/ccache/libexec' ]; then
+    CCACHE_WRAPPER_PATH=/usr/local/opt/ccache/libexec
+  fi
+fi
+
 cd "$(dirname "$0")/.."
 PWD=`printf "%q\n" "$(pwd)"`
 BASE_DIR="$PWD"
@@ -76,7 +88,7 @@ INSTALL_DIR="$TORCH_LIB_DIR/tmp_install"
 THIRD_PARTY_DIR="$BASE_DIR/third_party"
 
 CMAKE_VERSION=${CMAKE_VERSION:="cmake"}
-C_FLAGS=" -DTH_INDEX_BASE=0 -I\"$INSTALL_DIR/include\" \
+C_FLAGS=" -I\"$INSTALL_DIR/include\" \
   -I\"$INSTALL_DIR/include/TH\" -I\"$INSTALL_DIR/include/THC\" \
   -I\"$INSTALL_DIR/include/THS\" -I\"$INSTALL_DIR/include/THCS\" \
   -I\"$INSTALL_DIR/include/THNN\" -I\"$INSTALL_DIR/include/THCUNN\""
@@ -90,7 +102,11 @@ if [[ $(uname) == 'Darwin' ]]; then
     LDFLAGS="$LDFLAGS -Wl,-rpath,@loader_path"
     LD_POSTFIX=".dylib"
 else
-    LDFLAGS="$LDFLAGS -Wl,-rpath,\$ORIGIN"
+    if [[ $USE_ROCM -eq 1 ]]; then
+        LDFLAGS="$LDFLAGS -Wl,-rpath,\\\\\\\$ORIGIN"
+    else
+        LDFLAGS="$LDFLAGS -Wl,-rpath,\$ORIGIN"
+    fi
 fi
 CPP_FLAGS=" -std=c++11 "
 GLOO_FLAGS=""
@@ -144,7 +160,7 @@ function build() {
   # TODO: The *_LIBRARIES cmake variables should eventually be
   # deprecated because we are using .cmake files to handle finding
   # installed libraries instead
-  ${CMAKE_VERSION} ../../$1 -DCMAKE_MODULE_PATH="$BASE_DIR/cmake/FindCUDA" \
+  ${CMAKE_VERSION} ../../$1 -DCMAKE_MODULE_PATH="$BASE_DIR/cmake/Modules_CUDA_fix" \
               ${CMAKE_GENERATOR} \
               -DTorch_FOUND="1" \
               -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
@@ -182,8 +198,7 @@ function build() {
   ${CMAKE_INSTALL} -j"$NUM_JOBS"
   popd
 
-  local lib_prefix=$INSTALL_DIR/lib/lib$1
-
+  # Fix rpaths of shared libraries
   if [[ $(uname) == 'Darwin' ]]; then
     pushd "$INSTALL_DIR/lib"
     for lib in *.dylib; do
@@ -194,18 +209,26 @@ function build() {
   fi
 }
 
+function path_remove {
+  # Delete path by parts so we can never accidentally remove sub paths
+  PATH=${PATH//":$1:"/":"} # delete any instances in the middle
+  PATH=${PATH/#"$1:"/} # delete any instance at the beginning
+  PATH=${PATH/%":$1"/} # delete any instance in the at the end
+}
+
 function build_nccl() {
   mkdir -p build/nccl
   pushd build/nccl
-  ${CMAKE_VERSION} ../../nccl -DCMAKE_MODULE_PATH="$BASE_DIR/cmake/FindCUDA" \
+  ${CMAKE_VERSION} ../../nccl -DCMAKE_MODULE_PATH="$BASE_DIR/cmake/Modules_CUDA_fix" \
               ${CMAKE_GENERATOR} \
               -DCMAKE_BUILD_TYPE=Release \
               -DCMAKE_INSTALL_PREFIX="$INSTALL_DIR" \
               -DCMAKE_C_FLAGS="$C_FLAGS $USER_CFLAGS" \
               -DCMAKE_CXX_FLAGS="$C_FLAGS $CPP_FLAGS $USER_CFLAGS" \
               -DCMAKE_SHARED_LINKER_FLAGS="$USER_LDFLAGS" \
-              -DCMAKE_UTILS_PATH="$BASE_DIR/cmake/public/utils.cmake"
-  ${CMAKE_INSTALL}
+              -DCMAKE_UTILS_PATH="$BASE_DIR/cmake/public/utils.cmake" \
+              -DNUM_JOBS="$NUM_JOBS"
+  ${CMAKE_INSTALL} -j"$NUM_JOBS"
   mkdir -p ${INSTALL_DIR}/lib
   cp "lib/libnccl.so.1" "${INSTALL_DIR}/lib/libnccl.so.1"
   if [ ! -f "${INSTALL_DIR}/lib/libnccl.so" ]; then
@@ -223,18 +246,32 @@ function build_nccl() {
 # detected them (to ensure that we have a consistent view between the
 # PyTorch and Caffe2 builds.)
 function build_caffe2() {
+  if [[ -z $EXTRA_CAFFE2_CMAKE_FLAGS ]]; then
+    EXTRA_CAFFE2_CMAKE_FLAGS=()
+  fi
+  if [[ -n $CCACHE_WRAPPER_PATH ]]; then
+    EXTRA_CAFFE2_CMAKE_FLAGS+=("-DCMAKE_C_COMPILER=$CCACHE_WRAPPER_PATH/gcc")
+    EXTRA_CAFFE2_CMAKE_FLAGS+=("-DCMAKE_CXX_COMPILER=$CCACHE_WRAPPER_PATH/g++")
+  fi
+  if [[ -n $CMAKE_PREFIX_PATH ]]; then
+    EXTRA_CAFFE2_CMAKE_FLAGS+=("-DCMAKE_PREFIX_PATH=$CMAKE_PREFIX_PATH")
+  fi
+
   mkdir -p build
   pushd build
   ${CMAKE_VERSION} .. \
   ${CMAKE_GENERATOR} \
+      -DBUILDING_WITH_TORCH_LIBS=ON \
       -DCMAKE_BUILD_TYPE=$BUILD_TYPE \
       -DBUILD_CAFFE2=$FULL_CAFFE2 \
+      -DBUILD_TORCH=$BUILD_TORCH \
       -DBUILD_ATEN=ON \
       -DBUILD_PYTHON=$FULL_CAFFE2 \
       -DBUILD_BINARY=OFF \
-      -DBUILD_SHARED_LIBS=ON \
+      -DBUILD_SHARED_LIBS=$BUILD_SHARED_LIBS \
       -DONNX_NAMESPACE=$ONNX_NAMESPACE \
       -DUSE_CUDA=$USE_CUDA \
+      -DCAFFE2_STATIC_LINK_CUDA=$CAFFE2_STATIC_LINK_CUDA \
       -DUSE_ROCM=$USE_ROCM \
       -DUSE_NNPACK=$USE_NNPACK \
       -DCUDNN_INCLUDE_DIR=$CUDNN_INCLUDE_DIR \
@@ -248,8 +285,8 @@ function build_caffe2() {
       -DCMAKE_EXPORT_COMPILE_COMMANDS=1 \
       -DCMAKE_C_FLAGS="$USER_CFLAGS" \
       -DCMAKE_CXX_FLAGS="$USER_CFLAGS" \
-      -DCMAKE_EXE_LINKER_FLAGS="$USER_LDFLAGS" \
-      -DCMAKE_SHARED_LINKER_FLAGS="$USER_LDFLAGS"
+      -DCMAKE_EXE_LINKER_FLAGS="$LDFLAGS $USER_LDFLAGS" \
+      -DCMAKE_SHARED_LINKER_FLAGS="$LDFLAGS $USER_LDFLAGS" ${EXTRA_CAFFE2_CMAKE_FLAGS[@]}
       # STOP!!! Are you trying to add a C or CXX flag?  Add it
       # to CMakeLists.txt and aten/CMakeLists.txt, not here.
       # We need the vanilla cmake build to work.
@@ -258,14 +295,21 @@ function build_caffe2() {
   # Install Python proto files
   if [[ $FULL_CAFFE2 -ne 0 ]]; then
     find . -name proto
-    for proto_file in ./caffe/proto/*.py; do
-      cp $proto_file "$BASE_DIR/caffe/proto/"
-    done
     for proto_file in ./caffe2/proto/*.py; do
       cp $proto_file "$BASE_DIR/caffe2/proto/"
     done
   fi
   popd
+
+  # Fix rpaths of shared libraries
+  if [[ $(uname) == 'Darwin' ]]; then
+    pushd "$INSTALL_DIR/lib"
+    for lib in *.dylib; do
+      echo "Updating install_name for $lib"
+      install_name_tool -id @rpath/$lib $lib
+    done
+    popd
+  fi
 }
 
 # In the torch/lib directory, create an installation directory

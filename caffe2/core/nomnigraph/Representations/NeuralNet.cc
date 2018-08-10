@@ -92,7 +92,7 @@ std::vector<NNGraph::NodeRef> getOutputs(NNGraph::NodeRef n) {
 }
 
 // Get all nodes tracked by CF graph
-std::unordered_set<repr::NNGraph::NodeRef> getTrackedNodes(
+static std::unordered_set<repr::NNGraph::NodeRef> getTrackedNodes(
     repr::NNCFGraph& cf) {
   std::unordered_set<repr::NNGraph::NodeRef> cfTrackedNodes;
   for (const auto& bbNode : cf.getMutableNodes()) {
@@ -104,7 +104,7 @@ std::unordered_set<repr::NNGraph::NodeRef> getTrackedNodes(
   return cfTrackedNodes;
 }
 
-size_t coalesceInsertedDataDependenciesHelper(repr::NNModule* m) {
+static size_t coalesceInsertedDataDependenciesHelper(repr::NNModule* m) {
   auto cfTrackedNodes = getTrackedNodes(m->controlFlow);
 
   for (auto& bbNode : m->controlFlow.getMutableNodes()) {
@@ -179,6 +179,24 @@ void coalesceInsertedDataDependencies(repr::NNModule* m) {
       seen.insert(instr);
     }
   }
+}
+
+bool hasSingleOutputAndConsumer(NNGraph::NodeRef nodeRef) {
+  auto nodeOutputs = nn::getOutputs(nodeRef);
+  NOM_REQUIRE_OR_RET_FALSE(nodeOutputs.size() == 1);
+  auto nodeConsumers = nn::getConsumers(nodeOutputs.front());
+  return nodeConsumers.size() == 1;
+}
+
+NNNodeMatchCriteria matchAnyNode() {
+  return [](NNGraph::NodeRef /* unused */) { return true; };
+}
+
+NNSubtree operatorTree(
+    const NNNodeMatchCriteria& root,
+    const std::vector<NNSubtree>& childrenCriteria,
+    int count) {
+  return NNSubtree(matchAnyNode(), {NNSubtree(root, childrenCriteria)}, count);
 }
 
 } // namespace nn
